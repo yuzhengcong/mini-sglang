@@ -42,9 +42,22 @@ def create_fi_backend(config: ModelConfig, kvcache: BaseKVCache, page_table: tor
 
 @SUPPORTED_ATTENTION_BACKENDS.register("fa")
 def create_fa_backend(config: ModelConfig, kvcache: BaseKVCache, page_table: torch.Tensor):
-    from .fa import FlashAttentionBackend
+    try:
+        from minisgl.kvcache.mla_pool import MLAKVCache  # type: ignore
+        is_mla = isinstance(kvcache, MLAKVCache)
+    except Exception:
+        is_mla = False
+    if is_mla:
+        from .mla import MLAFlashAttentionBackend
+        return MLAFlashAttentionBackend(config, kvcache, page_table)
+    else:
+        from .fa import FlashAttentionBackend
+        return FlashAttentionBackend(config, kvcache, page_table)
 
-    return FlashAttentionBackend(config, kvcache, page_table)
+@SUPPORTED_ATTENTION_BACKENDS.register("fa-mla")
+def create_fa_mla_backend(config: ModelConfig, kvcache: BaseKVCache, page_table: torch.Tensor):
+    from .mla import MLAFlashAttentionBackend
+    return MLAFlashAttentionBackend(config, kvcache, page_table)
 
 
 def validate_backend(backend: str):
@@ -67,13 +80,24 @@ def create_attention_backend(
     kvcache: BaseKVCache,
     page_table: torch.Tensor,
 ) -> BaseAttnBackend:
+    try:
+        from minisgl.kvcache.mla_pool import MLAKVCache  # type: ignore
+        use_mla = isinstance(kvcache, MLAKVCache)
+    except Exception:
+        use_mla = False
+
     if backend == "auto":
         backend = resolve_auto_backend(config)
+        if use_mla:
+            backend = "fa"
         logger.info(f"Auto-selected attention backend: {backend}")
 
     if "," in backend:
         assert backend.count(",") == 1, "Only one comma is allowed in hybrid backend"
         p_backend, d_backend = backend.split(",", 1)
+        if use_mla:
+            logger.warning("MLA KV cache detected; overriding hybrid backend to 'fa' for both phases.")
+            p_backend = d_backend = "fa"
         if p_backend != d_backend:
             logger.info(f"Using hybrid attention backend: prefill={p_backend}, decode={d_backend}")
             p_backend = create_attention_backend(p_backend, config, kvcache, page_table)
@@ -81,6 +105,10 @@ def create_attention_backend(
             return HybridBackend(p_backend, d_backend)
         backend = p_backend  # both are the same, fall through to single backend
         logger.warning(f"P/D attention backends are the same: {backend}, using single backend.")
+
+    if use_mla and backend == "fi":
+        logger.warning("MLA KV cache not supported in FlashInfer yet; overriding to 'fa'.")
+        backend = "fa"
 
     return SUPPORTED_ATTENTION_BACKENDS[backend](config, kvcache, page_table)
 

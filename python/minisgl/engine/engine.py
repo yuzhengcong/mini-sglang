@@ -145,9 +145,15 @@ class Engine:
 
     def _determine_num_pages(self, old_free_memory: int, config: EngineConfig) -> int:
         new_free_memory = self._sync_get_memory()[1]
+        eff_dim = (
+            getattr(config.model_config, "latent_dim", None)
+            if getattr(config.model_config, "kv_variant", None) == "mla"
+            else None
+        )
+        eff_dim = int(eff_dim) if eff_dim is not None else config.model_config.head_dim
         cache_per_page = (
             2  # key + value
-            * self.model_config.head_dim
+            * eff_dim
             * divide_even(self.model_config.num_kv_heads, config.tp_info.size)
             * config.page_size
             * self.dtype.itemsize

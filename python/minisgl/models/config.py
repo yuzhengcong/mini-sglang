@@ -28,12 +28,16 @@ class ModelConfig:
     rotary_config: RotaryConfig
     hidden_act: str
     tie_word_embeddings: bool
+    latent_dim: int | None = None
+    kv_variant: str | None = None
 
     @classmethod
     def from_hf(cls, config: LlamaConfig) -> ModelConfig:
         num_kv_heads = getattr(config, "num_key_value_heads", config.num_attention_heads)
         head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         tie_word_embeddings = getattr(config, "tie_word_embeddings", False)
+        latent_dim = getattr(config, "kv_latent_dim", None)
+        kv_variant = getattr(config, "kv_variant", None)
         return cls(
             num_layers=config.num_hidden_layers,
             num_qo_heads=config.num_attention_heads,
@@ -52,4 +56,6 @@ class ModelConfig:
                 base=config.rope_theta,
                 scaling=getattr(config, "rope_scaling", None),
             ),
+            latent_dim=latent_dim,
+            kv_variant=kv_variant,
         )

@@ -31,17 +31,35 @@ def create_kvcache(
     device: torch.device,
     cache_layout: KVCacheLayout = KVCacheLayout.LayerFirst,
 ) -> BaseKVCache:
-    from .mha_pool import MHAKVCache  # TODO: support other variants (e.g. MLA)
+    from .mha_pool import MHAKVCache
+    from .mla_pool import MLAKVCache
+    
+       
 
-    return MHAKVCache(
-        num_kv_heads=model_config.num_kv_heads,
-        num_pages=num_pages,
-        kv_layout=cache_layout,
-        num_layers=model_config.num_layers,
-        head_dim=model_config.head_dim,
-        device=device,
-        dtype=dtype,
-    )
+    latent_dim = getattr(model_config, "latent_dim", None)
+    kv_variant = getattr(model_config, "kv_variant", None)
+    use_mla = latent_dim is not None and kv_variant == "mla"
+
+    if use_mla and MLAKVCache is not None:
+        return MLAKVCache(
+            num_kv_heads=model_config.num_kv_heads,
+            num_pages=num_pages,
+            kv_layout=cache_layout,
+            num_layers=model_config.num_layers,
+            latent_dim=int(latent_dim),  # type: ignore[arg-type]
+            device=device,
+            dtype=dtype,
+        )
+    else:
+        return MHAKVCache(
+            num_kv_heads=model_config.num_kv_heads,
+            num_pages=num_pages,
+            kv_layout=cache_layout,
+            num_layers=model_config.num_layers,
+            head_dim=model_config.head_dim,
+            device=device,
+            dtype=dtype,
+        )
 
 
 @SUPPORTED_CACHE_MANAGER.register("naive")
