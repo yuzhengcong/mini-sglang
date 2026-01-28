@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from minisgl.kvcache import BaseKVCache
     from minisgl.models import ModelConfig
 
-
 class MLAFlashAttentionBackend(FlashAttentionBackend):
 
     def __init__(self, config: ModelConfig, kvcache: BaseKVCache, page_table: torch.Tensor):
